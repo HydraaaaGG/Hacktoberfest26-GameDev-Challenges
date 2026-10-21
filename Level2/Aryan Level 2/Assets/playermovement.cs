@@ -13,16 +13,30 @@ public class PlayerMovement : MonoBehaviour
     public float growMultiplier = 1.8f; // How much bigger the ball gets when E is held
     public float growLerpSpeed = 12f;   // How smoothly it grows and shrinks
 
+    [Header("Color Palette (Keys 1, 2, 3, 4)")]
+    public Color color1 = Color.white;  // Press '1'
+    public Color color2 = Color.red;    // Press '2'
+    public Color color3 = Color.green;  // Press '3'
+    public Color color4 = Color.blue;   // Press '4'
+    public float colorLerpSpeed = 10f;  // Smooth color transition speed
+
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
     private Vector3 originalScale;
     private float currentGrowth = 1f;
+    private Color targetColor;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         originalScale = transform.localScale;
+        targetColor = color1;
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = targetColor;
+        }
     }
 
     void Update()
@@ -30,47 +44,52 @@ public class PlayerMovement : MonoBehaviour
         float x = Input.GetAxisRaw("Horizontal");
         float y = Input.GetAxisRaw("Vertical");
 
-        // Determine current speed based on whether Shift is held down
-        float currentSpeed = speed;
-        if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-        {
-            currentSpeed *= runMultiplier;
-        }
+        // Movement & Sprinting (Shift)
+        bool isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        float currentSpeed = isRunning ? (speed * runMultiplier) : speed;
 
         Vector2 movement = new Vector2(x, y).normalized;
         rb.linearVelocity = movement * currentSpeed;
 
-        // Handle E key growth input smoothly
+        // Growth (E key)
         float targetGrowth = Input.GetKey(KeyCode.E) ? growMultiplier : 1f;
         currentGrowth = Mathf.Lerp(currentGrowth, targetGrowth, Time.deltaTime * growLerpSpeed);
 
-        // Handle P key invisibility (turns off SpriteRenderer while P is held down)
+        // Color Selection (Keys 1, 2, 3, 4)
+        if (Input.GetKeyDown(KeyCode.Alpha1)) targetColor = color1;
+        if (Input.GetKeyDown(KeyCode.Alpha2)) targetColor = color2;
+        if (Input.GetKeyDown(KeyCode.Alpha3)) targetColor = color3;
+        if (Input.GetKeyDown(KeyCode.Alpha4)) targetColor = color4;
+
+        // Invisibility (P key) and Color Lerping
         if (spriteRenderer != null)
         {
-            spriteRenderer.enabled = !Input.GetKey(KeyCode.P);
+            bool isInvisible = Input.GetKey(KeyCode.P);
+            spriteRenderer.enabled = !isInvisible;
+
+            if (!isInvisible)
+            {
+                spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * colorLerpSpeed);
+            }
         }
 
-        // Apply Squash, Stretch, and Growth
+        // Apply Squash, Stretch, and Scale
         HandleSquashAndStretch(movement);
     }
 
     void HandleSquashAndStretch(Vector2 movement)
     {
-        // The base scale dynamically updates based on whether the E key is held
         Vector3 currentBaseScale = originalScale * currentGrowth;
 
         if (movement.sqrMagnitude > 0.01f)
         {
-            // Calculate stretch intensity based on actual velocity vs max possible speed
             float maxPossibleSpeed = speed * runMultiplier;
             float speedRatio = Mathf.Clamp01(rb.linearVelocity.magnitude / maxPossibleSpeed);
             float stretch = speedRatio * maxStretch;
 
-            // Rotate the ball to face the direction of movement so it stretches along its path
             float angle = Mathf.Atan2(movement.y, movement.x) * Mathf.Rad2Deg;
             transform.rotation = Quaternion.Euler(0, 0, angle);
 
-            // Stretch along the X-axis (direction of travel) and squash along the Y-axis, scaling with E growth
             Vector3 targetScale = new Vector3(
                 currentBaseScale.x * (1f + stretch),
                 currentBaseScale.y * (1f - stretch),
@@ -81,7 +100,6 @@ public class PlayerMovement : MonoBehaviour
         }
         else
         {
-            // Smoothly return to the current growth scale (or original size if E is released) when stopped
             transform.localScale = Vector3.Lerp(transform.localScale, currentBaseScale, Time.deltaTime * scaleLerpSpeed);
         }
     }
