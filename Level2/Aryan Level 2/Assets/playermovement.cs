@@ -20,6 +20,16 @@ public class PlayerMovement : MonoBehaviour
     public Color color4 = Color.blue;   // Press '4'
     public float colorLerpSpeed = 10f;  // Smooth color transition speed
 
+    [Header("Dash Settings (L Key)")]
+    public float dashForce = 25f;        // Speed burst during dash
+    public float dashDuration = 0.2f;    // How long the dash burst lasts (in seconds)
+    public float dashCooldown = 1f;      // Cooldown in seconds between dashes
+    
+    private float nextDashTime = 0f;
+    private float dashTimer = 0f;
+    private Vector2 dashDirection;
+    private Vector2 lastMoveDir = Vector2.right; // Fallback direction when standing still
+
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
     private Vector3 originalScale;
@@ -44,12 +54,34 @@ public class PlayerMovement : MonoBehaviour
         float x = Input.GetAxisRaw("Horizontal");
         float y = Input.GetAxisRaw("Vertical");
 
-        // Movement & Sprinting (Shift)
-        bool isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        float currentSpeed = isRunning ? (speed * runMultiplier) : speed;
-
         Vector2 movement = new Vector2(x, y).normalized;
-        rb.linearVelocity = movement * currentSpeed;
+
+        // Save last movement direction so you can dash while standing still
+        if (movement.sqrMagnitude > 0.01f)
+        {
+            lastMoveDir = movement;
+        }
+
+        // --- DASH LOGIC ---
+        if (Input.GetKeyDown(KeyCode.L) && Time.time >= nextDashTime)
+        {
+            dashDirection = (movement.sqrMagnitude > 0.01f) ? movement : lastMoveDir;
+            dashTimer = dashDuration;
+            nextDashTime = Time.time + dashCooldown;
+        }
+
+        // Apply movement velocity (Handling active dash vs normal movement)
+        if (dashTimer > 0)
+        {
+            rb.linearVelocity = dashDirection * dashForce;
+            dashTimer -= Time.deltaTime;
+        }
+        else
+        {
+            bool isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            float currentSpeed = isRunning ? (speed * runMultiplier) : speed;
+            rb.linearVelocity = movement * currentSpeed;
+        }
 
         // Growth (E key)
         float targetGrowth = Input.GetKey(KeyCode.E) ? growMultiplier : 1f;
@@ -81,13 +113,13 @@ public class PlayerMovement : MonoBehaviour
     {
         Vector3 currentBaseScale = originalScale * currentGrowth;
 
-        if (movement.sqrMagnitude > 0.01f)
+        if (rb.linearVelocity.magnitude > 0.1f)
         {
-            float maxPossibleSpeed = speed * runMultiplier;
+            float maxPossibleSpeed = Mathf.Max(speed * runMultiplier, dashForce);
             float speedRatio = Mathf.Clamp01(rb.linearVelocity.magnitude / maxPossibleSpeed);
             float stretch = speedRatio * maxStretch;
 
-            float angle = Mathf.Atan2(movement.y, movement.x) * Mathf.Rad2Deg;
+            float angle = Mathf.Atan2(rb.linearVelocity.y, rb.linearVelocity.x) * Mathf.Rad2Deg;
             transform.rotation = Quaternion.Euler(0, 0, angle);
 
             Vector3 targetScale = new Vector3(
